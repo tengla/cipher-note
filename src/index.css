@@ -1,0 +1,155 @@
+@import "../styles/globals.css";
+
+@layer base {
+  :root {
+    font-family: 'Outfit', system-ui, sans-serif;
+    font-size: 18px;
+  }
+
+  body {
+    @apply grid place-items-center min-w-[320px] min-h-screen relative m-0 bg-background text-foreground overflow-x-hidden;
+  }
+}
+
+/* Matrix rain canvas sits behind everything */
+#matrix-rain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.07;
+}
+
+/* Glow effects */
+.glow-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glow-primary), transparent);
+}
+
+.glow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--glow-primary-strong), 0 0 20px var(--glow-primary);
+}
+
+/* Glass card effect */
+.glass-card {
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--surface-glass-border);
+}
+
+/* Encrypted text shimmer */
+@keyframes cipher-shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.cipher-text {
+  background: linear-gradient(
+    90deg,
+    oklch(0.75 0.18 160 / 0.6) 0%,
+    oklch(0.85 0.15 170 / 0.9) 50%,
+    oklch(0.75 0.18 160 / 0.6) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: cipher-shimmer 3s ease-in-out infinite;
+}
+
+/* Stagger fade-in for note cards */
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.note-card-enter {
+  animation: fade-slide-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Pulse ring for active editing */
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 var(--glow-primary); }
+  50% { box-shadow: 0 0 0 4px oklch(0.75 0.18 160 / 0.15); }
+}
+
+.editing-pulse {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+/* Log text typewriter cursor */
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.log-cursor::after {
+  content: '█';
+  animation: blink-cursor 1s step-end infinite;
+  color: var(--primary);
+  margin-left: 2px;
+  font-size: 0.65em;
+}
+
+/* Category badges */
+.badge-general { background: oklch(0.5 0.15 260 / 0.25); color: oklch(0.75 0.12 260); border: 1px solid oklch(0.5 0.15 260 / 0.3); }
+.badge-work { background: oklch(0.5 0.15 200 / 0.25); color: oklch(0.75 0.12 200); border: 1px solid oklch(0.5 0.15 200 / 0.3); }
+.badge-personal { background: oklch(0.55 0.18 330 / 0.25); color: oklch(0.78 0.14 330); border: 1px solid oklch(0.55 0.18 330 / 0.3); }
+.badge-ideas { background: oklch(0.6 0.18 80 / 0.25); color: oklch(0.8 0.14 80); border: 1px solid oklch(0.6 0.18 80 / 0.3); }
+.badge-todo { background: oklch(0.55 0.18 160 / 0.25); color: oklch(0.78 0.14 160); border: 1px solid oklch(0.55 0.18 160 / 0.3); }
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0.03 260);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.45 0.04 260);
+}
+
+/* Noise overlay */
+.noise-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* Gradient mesh background */
+.bg-mesh {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 40%, oklch(0.25 0.08 260 / 0.4), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 20%, oklch(0.2 0.06 200 / 0.3), transparent),
+    radial-gradient(ellipse 50% 60% at 50% 90%, oklch(0.18 0.05 160 / 0.2), transparent),
+    var(--background);
+}
+
+@media (prefers-reduced-motion) {
+  *,
+  ::before,
+  ::after {
+    animation: none !important;
+  }
+}
