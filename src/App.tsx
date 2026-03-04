@@ -1,7 +1,11 @@
-import { useEffect, useRef } from "react";
-import { Shield, Lock } from "lucide-react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
+import { Shield, Lock, LogOut, KeyRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { NotesApp } from "./NotesApp";
 import "./index.css";
+
+const SESSION_KEY = "ciphernotes-passphrase";
 
 function MatrixRain() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,12 +35,12 @@ function MatrixRain() {
       ctx.font = `${fontSize}px monospace`;
 
       for (let i = 0; i < drops.length; i++) {
-        const text = chars[Math.floor(Math.random() * chars.length)];
-        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+        const text = chars.charAt(Math.floor(Math.random() * chars.length));
+        ctx.fillText(text, i * fontSize, drops[i]! * fontSize);
+        if (drops[i]! * fontSize > canvas.height && Math.random() > 0.975) {
           drops[i] = 0;
         }
-        drops[i]++;
+        drops[i]!++;
       }
     };
 
@@ -50,7 +54,58 @@ function MatrixRain() {
   return <canvas ref={canvasRef} id="matrix-rain" />;
 }
 
+function PassphrasePrompt({ onUnlock }: { onUnlock: (passphrase: string) => void }) {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const passphrase = (formData.get("passphrase") as string).trim();
+    if (passphrase) onUnlock(passphrase);
+  };
+
+  return (
+    <div className="glass-card rounded-xl p-8 max-w-sm mx-auto text-center">
+      <div className="flex justify-center mb-4">
+        <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <KeyRound className="w-7 h-7 text-primary" strokeWidth={1.5} />
+        </div>
+      </div>
+      <h2 className="text-lg font-semibold mb-1">Unlock Your Vault</h2>
+      <p className="text-xs text-muted-foreground/60 mb-6">
+        Enter your passphrase to encrypt &amp; decrypt notes
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <Input
+          name="passphrase"
+          type="password"
+          placeholder="Passphrase..."
+          autoFocus
+          required
+          className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors text-center"
+        />
+        <Button type="submit" className="gap-2 font-semibold">
+          <Lock className="w-3.5 h-3.5" />
+          Unlock
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 export function App() {
+  const [passphrase, setPassphrase] = useState<string | null>(() => {
+    return sessionStorage.getItem(SESSION_KEY);
+  });
+
+  const handleUnlock = (pp: string) => {
+    sessionStorage.setItem(SESSION_KEY, pp);
+    setPassphrase(pp);
+  };
+
+  const handleLock = () => {
+    sessionStorage.removeItem(SESSION_KEY);
+    setPassphrase(null);
+  };
+
   return (
     <div className="bg-mesh noise-overlay min-h-screen w-full">
       <MatrixRain />
@@ -74,11 +129,28 @@ export function App() {
             <span className="text-xs opacity-70 font-mono">Your data never leaves the browser.</span>
           </p>
           <div className="glow-line mt-6 mx-auto max-w-xs" />
+          {passphrase && (
+            <div className="mt-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLock}
+                className="gap-1.5 text-xs text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Lock
+              </Button>
+            </div>
+          )}
         </header>
 
         {/* Main content */}
         <main>
-          <NotesApp />
+          {passphrase ? (
+            <NotesApp passphrase={passphrase} />
+          ) : (
+            <PassphrasePrompt onUnlock={handleUnlock} />
+          )}
         </main>
 
         {/* Footer */}

@@ -42,11 +42,11 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function addNote(note: Omit<Note, "id">): Promise<number> {
+export async function addNote(note: Omit<Note, "id">, passphrase: string): Promise<number> {
   const db = await openDB();
   const stored: Omit<StoredNote, "id"> = {
     ...note,
-    content: note.content ? await encrypt(note.content) : "",
+    content: note.content ? await encrypt(note.content, passphrase) : "",
   };
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -57,17 +57,17 @@ export async function addNote(note: Omit<Note, "id">): Promise<number> {
   });
 }
 
-async function decryptNote(stored: StoredNote): Promise<Note> {
+async function decryptNote(stored: StoredNote, passphrase: string): Promise<Note> {
   if (!stored.content) return { ...stored, content: "" };
   try {
-    return { ...stored, content: await decrypt(stored.content) };
+    return { ...stored, content: await decrypt(stored.content, passphrase) };
   } catch {
     // Legacy unencrypted content — return as-is
     return { ...stored };
   }
 }
 
-export async function getAllNotes(): Promise<Note[]> {
+export async function getAllNotes(passphrase: string): Promise<Note[]> {
   const db = await openDB();
   const storedNotes: StoredNote[] = await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
@@ -76,10 +76,10 @@ export async function getAllNotes(): Promise<Note[]> {
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () => reject(request.error));
   });
-  return Promise.all(storedNotes.map(decryptNote));
+  return Promise.all(storedNotes.map((n) => decryptNote(n, passphrase)));
 }
 
-export async function getNote(id: number): Promise<Note | undefined> {
+export async function getNote(id: number, passphrase: string): Promise<Note | undefined> {
   const db = await openDB();
   const stored: StoredNote | undefined = await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
@@ -88,14 +88,14 @@ export async function getNote(id: number): Promise<Note | undefined> {
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () => reject(request.error));
   });
-  return stored ? decryptNote(stored) : undefined;
+  return stored ? decryptNote(stored, passphrase) : undefined;
 }
 
-export async function updateNote(note: Note): Promise<void> {
+export async function updateNote(note: Note, passphrase: string): Promise<void> {
   const db = await openDB();
   const stored: StoredNote = {
     ...note,
-    content: note.content ? await encrypt(note.content) : "",
+    content: note.content ? await encrypt(note.content, passphrase) : "",
   };
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -117,7 +117,7 @@ export async function deleteNote(id: number): Promise<void> {
   });
 }
 
-export async function getNotesByCategory(category: string): Promise<Note[]> {
+export async function getNotesByCategory(category: string, passphrase: string): Promise<Note[]> {
   const db = await openDB();
   const storedNotes: StoredNote[] = await new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
@@ -127,7 +127,7 @@ export async function getNotesByCategory(category: string): Promise<Note[]> {
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () => reject(request.error));
   });
-  return Promise.all(storedNotes.map(decryptNote));
+  return Promise.all(storedNotes.map((n) => decryptNote(n, passphrase)));
 }
 
 export async function clearAllNotes(): Promise<void> {

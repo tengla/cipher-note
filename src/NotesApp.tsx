@@ -101,7 +101,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
   );
 }
 
-export function NotesApp() {
+export function NotesApp({ passphrase }: { passphrase: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -120,10 +120,10 @@ export function NotesApp() {
     try {
       let result: Note[];
       if (filterCategory === "all") {
-        result = await getAllNotes();
+        result = await getAllNotes(passphrase);
         log(`getAllNotes() → ${result.length} notes fetched & decrypted`);
       } else {
-        result = await getNotesByCategory(filterCategory);
+        result = await getNotesByCategory(filterCategory, passphrase);
         log(
           `getNotesByCategory("${filterCategory}") → ${result.length} notes fetched & decrypted`
         );
@@ -136,7 +136,7 @@ export function NotesApp() {
     } catch (err) {
       log(`Error loading notes: ${err}`);
     }
-  }, [filterCategory, log]);
+  }, [filterCategory, passphrase, log]);
 
   useEffect(() => {
     loadNotes();
@@ -161,7 +161,7 @@ export function NotesApp() {
           category,
           updatedAt: Date.now(),
         };
-        await updateNote(updated);
+        await updateNote(updated, passphrase);
         log(
           `updateNote(${updated.id}) → Encrypted & updated "${title}" [${category}]`
         );
@@ -174,7 +174,7 @@ export function NotesApp() {
           category,
           createdAt: now,
           updatedAt: now,
-        });
+        }, passphrase);
         log(`addNote() → Encrypted & stored "${title}" with id=${id} [${category}]`);
       }
       form.reset();

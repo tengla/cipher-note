@@ -1,17 +1,15 @@
-// Hardcoded passphrase for demo purposes — in production, derive from user input
-const PASSPHRASE = "my-super-secret-demo-key-2024";
-
 // Fixed salt for deterministic key derivation (in production, store per-user)
 const SALT = new TextEncoder().encode("indexeddb-demo-salt");
 
 let cachedKey: CryptoKey | null = null;
+let cachedPassphrase: string | null = null;
 
-async function deriveKey(): Promise<CryptoKey> {
-  if (cachedKey) return cachedKey;
+async function deriveKey(passphrase: string): Promise<CryptoKey> {
+  if (cachedKey && cachedPassphrase === passphrase) return cachedKey;
 
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(PASSPHRASE),
+    new TextEncoder().encode(passphrase),
     "PBKDF2",
     false,
     ["deriveKey"]
@@ -24,12 +22,13 @@ async function deriveKey(): Promise<CryptoKey> {
     false,
     ["encrypt", "decrypt"]
   );
+  cachedPassphrase = passphrase;
 
   return cachedKey;
 }
 
-export async function encrypt(plaintext: string): Promise<string> {
-  const key = await deriveKey();
+export async function encrypt(plaintext: string, passphrase: string): Promise<string> {
+  const key = await deriveKey(passphrase);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(plaintext);
 
@@ -45,8 +44,8 @@ export async function encrypt(plaintext: string): Promise<string> {
   return `${ivB64}:${ctB64}`;
 }
 
-export async function decrypt(packed: string): Promise<string> {
-  const key = await deriveKey();
+export async function decrypt(packed: string, passphrase: string): Promise<string> {
+  const key = await deriveKey(passphrase);
   const colonIdx = packed.indexOf(":");
   const ivB64 = packed.slice(0, colonIdx);
   const ctB64 = packed.slice(colonIdx + 1);
