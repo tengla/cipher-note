@@ -28,7 +28,15 @@ function MatrixRain() {
     const columns = Math.floor(canvas.width / fontSize);
     const drops: number[] = Array(columns).fill(1);
 
-    const draw = () => {
+    let animId: number;
+    let lastTime = 0;
+    const frameInterval = 50;
+
+    const draw = (time: number) => {
+      animId = requestAnimationFrame(draw);
+      if (time - lastTime < frameInterval) return;
+      lastTime = time;
+
       ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = "#34d399";
@@ -44,9 +52,9 @@ function MatrixRain() {
       }
     };
 
-    const interval = setInterval(draw, 50);
+    animId = requestAnimationFrame(draw);
     return () => {
-      clearInterval(interval);
+      cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
     };
   }, []);
