@@ -8,9 +8,12 @@ A fully encrypted notes application that stores everything locally in the browse
 - **Passphrase unlock** — User-supplied passphrase to encrypt & decrypt notes, stored only in session storage
 - **IndexedDB storage** — Notes persist locally with no server-side storage
 - **Markdown support** — Write notes in markdown with a toolbar editor and live preview
-- **Category filtering** — Organize notes by General, Work, Personal, Ideas, or Todo
+- **Custom categories** — Create, rename, reorder, delete, and color-pick categories via a built-in editor
+- **Vault backup** — Export/import your encrypted vault as a JSON file to protect against browser data loss
+- **Persistent storage** — Requests `navigator.storage.persist()` to prevent browser eviction of IndexedDB
 - **Raw ciphertext viewer** — Toggle to inspect the encrypted content stored in IndexedDB
 - **Operation log** — Real-time panel showing encryption/decryption events
+- **Storage status** — Shows whether storage is persistent or evictable, plus usage stats
 - **Matrix rain background** — Animated canvas effect
 - **Glassmorphism UI** — Built with shadcn/ui components and Tailwind CSS
 
@@ -21,7 +24,7 @@ A fully encrypted notes application that stores everything locally in the browse
 - **Styling:** Tailwind CSS 4.1, shadcn/ui, Lucide icons
 - **Markdown:** react-markdown, remark-gfm, rehype-sanitize
 - **Encryption:** Web Crypto API (AES-256-GCM)
-- **Storage:** IndexedDB
+- **Storage:** IndexedDB (notes + categories stores)
 - **Testing:** bun:test, Testing Library, happy-dom, fake-indexeddb
 
 ## Getting Started
@@ -52,12 +55,22 @@ src/
 ├── index.css               # Global styles
 ├── frontend.tsx            # React app entry + HMR
 ├── App.tsx                 # Main component, passphrase unlock, Matrix rain
-├── NotesApp.tsx            # Notes UI (create, edit, delete, filter)
+├── NotesApp.tsx            # Notes UI, category editor, export/import
 ├── crypto.ts               # AES-256-GCM encryption/decryption
-├── db.ts                   # IndexedDB operations
+├── db.ts                   # IndexedDB operations, vault export/import
 ├── components/
 │   ├── ui/                 # shadcn/ui components
 │   └── markdown/           # Markdown editor & renderer
 ├── lib/utils.ts            # Utility functions
 └── *.test.{ts,tsx}         # Test suites
 ```
+
+## Data Persistence
+
+IndexedDB is "best-effort" storage by default — browsers can evict it under disk pressure or after inactivity (Safari is especially aggressive). CipherNotes mitigates this by:
+
+1. Requesting persistent storage on unlock so the browser won't auto-evict
+2. Showing a storage status indicator (persistent vs evictable) in the UI
+3. Providing vault export/import — download your encrypted vault as a `.json` backup file
+
+The exported file contains encrypted ciphertext, so it's safe to store anywhere — it requires your passphrase to read.
