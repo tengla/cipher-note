@@ -83,4 +83,19 @@ mock.module("./db", () => ({
   requestPersistentStorage: mock(async () => true),
   isStoragePersisted: mock(async () => true),
   getStorageEstimate: mock(async () => ({ usage: 1024, quota: 1024 * 1024 * 100 })),
+  createAndStoreKeyPair: mock(async () => ({
+    id: "default",
+    publicKey: { kty: "RSA", n: "mock-n", e: "AQAB" } as JsonWebKey,
+    wrappedPrivateKey: "mock-wrapped",
+    createdAt: Date.now(),
+  })),
+  getStoredKeyPair: mock(async () => undefined),
+  deleteStoredKeyPair: mock(async () => {}),
+  rotateKeyPairPassphrase: mock(async () => {}),
+  exportForRecipient: mock(async () => ({
+    version: 1,
+    exportedAt: Date.now(),
+    notes: [],
+  })),
+  importFromSender: mock(async () => 0),
 }));

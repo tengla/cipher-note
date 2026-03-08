@@ -9,7 +9,7 @@ import type { Note } from "./db";
 async function renderNotesApp(passphrase = "test") {
   let result: RenderResult;
   await act(async () => {
-    result = render(<NotesApp passphrase={passphrase} />);
+    result = render(<NotesApp passphrase={passphrase} hasKeyPair={false} />);
   });
   return result!;
 }

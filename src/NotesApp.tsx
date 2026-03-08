@@ -33,6 +33,11 @@ import {
   Download,
   Upload,
   HardDrive,
+  Send,
+  Inbox,
+  Key,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import {
   addNote,
@@ -52,10 +57,14 @@ import {
   importVault,
   isStoragePersisted,
   getStorageEstimate,
+  getStoredKeyPair,
+  exportForRecipient,
+  importFromSender,
   type Note,
   type Category,
   type VaultExport,
 } from "./db";
+import type { RecipientExport } from "./crypto";
 
 function getCategoryBadgeStyle(color: string) {
   return {
@@ -378,9 +387,9 @@ function CategoryEditor({
   );
 }
 
-type View = "list" | "detail" | "editor" | "categories";
+type View = "list" | "detail" | "editor" | "categories" | "share";
 
-export function NotesApp({ passphrase }: { passphrase: string }) {
+export function NotesApp({ passphrase, hasKeyPair }: { passphrase: string; hasKeyPair: boolean }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [viewingNote, setViewingNote] = useState<Note | null>(null);
@@ -404,11 +413,18 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [storageInfo, setStorageInfo] = useState<{ usage: number; quota: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sharedImportRef = useRef<HTMLInputElement>(null);
+  const recipientKeyRef = useRef<HTMLInputElement>(null);
+  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<number>>(new Set());
+  const [recipientKey, setRecipientKey] = useState<JsonWebKey | null>(null);
+  const [recipientKeyName, setRecipientKeyName] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     isStoragePersisted().then(setPersisted);
     getStorageEstimate().then(setStorageInfo);
   }, []);
+
 
   const categoryColorMap = Object.fromEntries(
     categories.map((c) => [c.name, c.color])
@@ -596,6 +612,91 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     }
     // Reset file input so re-selecting the same file works
     e.target.value = "";
+  };
+
+  const handleLoadRecipientKey = async (file: File) => {
+    try {
+      const text = await file.text();
+      const jwk: JsonWebKey = JSON.parse(text);
+      if (!jwk.kty || jwk.kty !== "RSA") {
+        log("Invalid key file — expected an RSA public key (JWK format)");
+        return;
+      }
+      setRecipientKey(jwk);
+      setRecipientKeyName(file.name);
+      log(`Loaded recipient public key from "${file.name}"`);
+    } catch (err) {
+      log(`Error loading recipient key: ${err}`);
+    }
+  };
+
+  const handleShareExport = async () => {
+    if (!recipientKey || selectedNoteIds.size === 0) return;
+    try {
+      setSharing(true);
+
+      // Get our own public key to include as sender info
+      const ourKeyPair = await getStoredKeyPair();
+      const senderPubKey = ourKeyPair?.publicKey;
+
+      const exported = await exportForRecipient(
+        Array.from(selectedNoteIds),
+        passphrase,
+        recipientKey,
+        senderPubKey
+      );
+
+      const json = JSON.stringify(exported, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ciphernotes-shared-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      log(`Exported ${selectedNoteIds.size} notes encrypted for recipient`);
+      setSelectedNoteIds(new Set());
+      setRecipientKey(null);
+      setRecipientKeyName(null);
+      setView("list");
+    } catch (err) {
+      log(`Error exporting for recipient: ${err}`);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleSharedImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data: RecipientExport = JSON.parse(text);
+      const count = await importFromSender(data, passphrase);
+      log(`Imported ${count} shared notes (decrypted with your private key, re-encrypted with passphrase)`);
+      await loadNotes();
+    } catch (err) {
+      log(`Error importing shared notes: ${err}`);
+    }
+    e.target.value = "";
+  };
+
+  const toggleNoteSelection = (id: number) => {
+    setSelectedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedNoteIds.size === notes.length) {
+      setSelectedNoteIds(new Set());
+    } else {
+      setSelectedNoteIds(new Set(notes.map((n) => n.id!)));
+    }
   };
 
   // Detail view — shown when viewing a note
@@ -861,6 +962,183 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     );
   }
 
+  // Share view — select notes and export for a recipient
+  if (view === "share") {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setView("list"); setSelectedNoteIds(new Set()); setRecipientKey(null); setRecipientKeyName(null); }}
+              className="h-7 w-7 p-0 text-muted-foreground/60 hover:text-foreground hover:bg-accent/50"
+              title="Back to notes"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
+              <Send className="w-3 h-3 text-primary" />
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Share Notes
+            </span>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground/60 mb-4">
+            Select notes to encrypt with a recipient's public key. They can only be read by the holder of the matching private key.
+          </p>
+
+          {/* Select all */}
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              className="flex items-center gap-2 text-xs text-muted-foreground/60 hover:text-foreground transition-colors"
+            >
+              {selectedNoteIds.size === notes.length && notes.length > 0 ? (
+                <CheckSquare className="w-3.5 h-3.5 text-primary" />
+              ) : (
+                <Square className="w-3.5 h-3.5" />
+              )}
+              {selectedNoteIds.size === notes.length ? "Deselect all" : "Select all"}
+            </button>
+            <span className="text-[10px] text-muted-foreground/40 font-mono">
+              {selectedNoteIds.size} selected
+            </span>
+          </div>
+
+          {/* Note selection list */}
+          <div className="flex flex-col gap-1.5 mb-4 max-h-64 overflow-y-auto">
+            {notes.map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                onClick={() => toggleNoteSelection(note.id!)}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 border transition-all text-left w-full ${
+                  selectedNoteIds.has(note.id!)
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-border/30 bg-background/30 hover:border-border/50"
+                }`}
+              >
+                {selectedNoteIds.has(note.id!) ? (
+                  <CheckSquare className="w-3.5 h-3.5 text-primary shrink-0" />
+                ) : (
+                  <Square className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                )}
+                <span
+                  className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 shrink-0"
+                  style={getCategoryBadgeStyle(categoryColorMap[note.category] ?? "260")}
+                >
+                  {note.category}
+                </span>
+                <span className="text-sm text-foreground truncate flex-1">
+                  {note.title}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Step 1: Load recipient's public key */}
+          <div className={`rounded-lg p-4 mb-3 ${
+            recipientKey
+              ? "bg-primary/5 border border-primary/20"
+              : "bg-background/40 border border-dashed border-border/40"
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Key className={`w-3.5 h-3.5 ${recipientKey ? "text-primary" : "text-muted-foreground/50"}`} />
+              <span className={`text-[11px] font-semibold uppercase tracking-widest ${
+                recipientKey ? "text-primary/80" : "text-muted-foreground/70"
+              }`}>
+                {recipientKey ? "Recipient Key Loaded" : "Step 1: Load Recipient's Key"}
+              </span>
+            </div>
+
+            {recipientKey ? (
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="text-[11px] text-muted-foreground/70 font-mono truncate flex-1">
+                  {recipientKeyName}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setRecipientKey(null); setRecipientKeyName(null); }}
+                  className="h-6 text-[10px] text-muted-foreground/50 hover:text-foreground"
+                >
+                  Change
+                </Button>
+              </div>
+            ) : (
+              <>
+                <p className="text-[10px] text-muted-foreground/50 mb-3">
+                  Load the recipient's .jwk.json public key file. You can get this from the recipient's Key Pair panel.
+                </p>
+                <input
+                  ref={recipientKeyRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleLoadRecipientKey(file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => recipientKeyRef.current?.click()}
+                  className="w-full gap-2"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Load Public Key File
+                </Button>
+              </>
+            )}
+          </div>
+
+          {/* Step 2: Encrypt & Download */}
+          <Button
+            onClick={handleShareExport}
+            disabled={selectedNoteIds.size === 0 || !recipientKey || sharing}
+            className="w-full gap-2 font-semibold"
+          >
+            <Send className={`w-3.5 h-3.5 ${sharing ? "animate-pulse" : ""}`} />
+            {sharing
+              ? "Encrypting..."
+              : selectedNoteIds.size === 0
+                ? "Select notes first"
+                : !recipientKey
+                  ? "Load recipient's key first"
+                  : `Encrypt & Download ${selectedNoteIds.size} note${selectedNoteIds.size !== 1 ? "s" : ""}`}
+          </Button>
+        </div>
+
+        {/* Operation Log */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-muted-foreground/40" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Operation Log
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLogs([])}
+              className="h-6 text-[10px] text-muted-foreground/40 hover:text-muted-foreground"
+            >
+              Clear
+            </Button>
+          </div>
+          <LogPanel logs={logs} />
+        </div>
+      </div>
+    );
+  }
+
   // List view — notes list with "New Note" button
   return (
     <div className="flex flex-col gap-6 w-full">
@@ -953,11 +1231,42 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
             <Upload className="w-3 h-3" />
             Import
           </Button>
+          {hasKeyPair && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setView("share")}
+                className="h-7 text-[10px] text-muted-foreground/50 hover:text-foreground gap-1"
+                title="Export notes encrypted for a recipient's public key"
+              >
+                <Send className="w-3 h-3" />
+                Share
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => sharedImportRef.current?.click()}
+                className="h-7 text-[10px] text-muted-foreground/50 hover:text-foreground gap-1"
+                title="Import notes shared with your public key"
+              >
+                <Inbox className="w-3 h-3" />
+                Receive
+              </Button>
+            </>
+          )}
           <input
             ref={fileInputRef}
             type="file"
             accept=".json"
             onChange={handleImport}
+            className="hidden"
+          />
+          <input
+            ref={sharedImportRef}
+            type="file"
+            accept=".json"
+            onChange={handleSharedImport}
             className="hidden"
           />
         </div>

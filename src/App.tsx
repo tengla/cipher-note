@@ -1,9 +1,16 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
-import { Shield, Lock, LogOut, KeyRound, RefreshCw } from "lucide-react";
+import { Shield, Lock, LogOut, KeyRound, RefreshCw, Key, Copy, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotesApp } from "./NotesApp";
-import { rotatePassphrase, requestPersistentStorage } from "./db";
+import {
+  rotatePassphrase,
+  requestPersistentStorage,
+  createAndStoreKeyPair,
+  getStoredKeyPair,
+  deleteStoredKeyPair,
+  type StoredKeyPair,
+} from "./db";
 import "./index.css";
 
 const SESSION_KEY = "ciphernotes-passphrase";
@@ -107,6 +114,11 @@ export function App() {
   const [showRotate, setShowRotate] = useState(false);
   const [rotateError, setRotateError] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
+  const [showKeyMgmt, setShowKeyMgmt] = useState(false);
+  const [keyPair, setKeyPair] = useState<StoredKeyPair | null>(null);
+  const [generatingKey, setGeneratingKey] = useState(false);
+  const [copiedPubKey, setCopiedPubKey] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
   const handleUnlock = async (pp: string) => {
     sessionStorage.setItem(SESSION_KEY, pp);
@@ -155,6 +167,58 @@ export function App() {
     }
   };
 
+  // Load key pair on unlock
+  useEffect(() => {
+    if (!passphrase) {
+      setKeyPair(null);
+      return;
+    }
+    getStoredKeyPair().then((kp) => setKeyPair(kp ?? null));
+  }, [passphrase]);
+
+  const handleGenerateKeyPair = async () => {
+    if (!passphrase) return;
+    try {
+      setGeneratingKey(true);
+      setKeyError(null);
+      const kp = await createAndStoreKeyPair(passphrase);
+      setKeyPair(kp);
+    } catch (err) {
+      setKeyError(`Failed to generate key pair: ${err}`);
+    } finally {
+      setGeneratingKey(false);
+    }
+  };
+
+  const handleDeleteKeyPair = async () => {
+    try {
+      await deleteStoredKeyPair();
+      setKeyPair(null);
+    } catch (err) {
+      setKeyError(`Failed to delete key pair: ${err}`);
+    }
+  };
+
+  const handleCopyPublicKey = async () => {
+    if (!keyPair) return;
+    const pubKeyStr = JSON.stringify(keyPair.publicKey);
+    await navigator.clipboard.writeText(pubKeyStr);
+    setCopiedPubKey(true);
+    setTimeout(() => setCopiedPubKey(false), 2000);
+  };
+
+  const handleExportPublicKey = () => {
+    if (!keyPair) return;
+    const json = JSON.stringify(keyPair.publicKey, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ciphernotes-publickey.jwk.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="bg-mesh noise-overlay min-h-screen w-full">
       <MatrixRain />
@@ -183,7 +247,16 @@ export function App() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { setShowRotate((v) => !v); setRotateError(null); }}
+                onClick={() => { setShowKeyMgmt((v) => !v); setShowRotate(false); setKeyError(null); }}
+                className="gap-1.5 text-xs text-muted-foreground/60 hover:text-primary hover:bg-primary/10"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Key Pair
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setShowRotate((v) => !v); setShowKeyMgmt(false); setRotateError(null); }}
                 className="gap-1.5 text-xs text-muted-foreground/60 hover:text-primary hover:bg-primary/10"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -198,6 +271,77 @@ export function App() {
                 <LogOut className="w-3.5 h-3.5" />
                 Lock
               </Button>
+            </div>
+          )}
+          {showKeyMgmt && (
+            <div className="glass-card rounded-xl p-5 max-w-sm mx-auto mt-4">
+              <h3 className="text-sm font-semibold mb-1">RSA Key Pair</h3>
+              <p className="text-[11px] text-muted-foreground/60 mb-4">
+                Generate a key pair for sharing encrypted notes with others.
+                Your private key is protected by your passphrase.
+              </p>
+
+              {keyError && (
+                <p className="text-xs text-destructive mb-3">{keyError}</p>
+              )}
+
+              {keyPair ? (
+                <div className="flex flex-col gap-3">
+                  <div className="rounded-lg bg-background/60 border border-primary/10 p-3">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Key className="w-3 h-3 text-primary/60" />
+                      <span className="text-[10px] font-semibold text-primary/60 uppercase tracking-widest">
+                        RSA-OAEP 4096-bit
+                      </span>
+                    </div>
+                    <p className="text-[10px] font-mono text-muted-foreground/50">
+                      Created {new Date(keyPair.createdAt).toLocaleDateString()}
+                    </p>
+                    <p className="text-[10px] font-mono text-muted-foreground/40 break-all mt-1 select-all">
+                      {keyPair.publicKey.n?.slice(0, 40)}...
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopyPublicKey}
+                      className="flex-1 gap-1.5 text-xs"
+                    >
+                      {copiedPubKey ? (
+                        <><Check className="w-3 h-3" /> Copied</>
+                      ) : (
+                        <><Copy className="w-3 h-3" /> Copy Public Key</>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportPublicKey}
+                      className="gap-1.5 text-xs"
+                    >
+                      Export
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleDeleteKeyPair}
+                      className="gap-1.5 text-xs text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  onClick={handleGenerateKeyPair}
+                  disabled={generatingKey}
+                  className="w-full gap-2 font-semibold"
+                >
+                  <Key className={`w-3.5 h-3.5 ${generatingKey ? "animate-pulse" : ""}`} />
+                  {generatingKey ? "Generating 4096-bit RSA..." : "Generate Key Pair"}
+                </Button>
+              )}
             </div>
           )}
           {showRotate && (
@@ -242,7 +386,7 @@ export function App() {
         {/* Main content */}
         <main>
           {passphrase ? (
-            <NotesApp passphrase={passphrase} />
+            <NotesApp passphrase={passphrase} hasKeyPair={!!keyPair} />
           ) : (
             <PassphrasePrompt onUnlock={handleUnlock} />
           )}
