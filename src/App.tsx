@@ -3,7 +3,7 @@ import { Shield, Lock, LogOut, KeyRound, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotesApp } from "./NotesApp";
-import { rotatePassphrase } from "./db";
+import { rotatePassphrase, requestPersistentStorage } from "./db";
 import "./index.css";
 
 const SESSION_KEY = "ciphernotes-passphrase";
@@ -108,9 +108,15 @@ export function App() {
   const [rotateError, setRotateError] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
 
-  const handleUnlock = (pp: string) => {
+  const handleUnlock = async (pp: string) => {
     sessionStorage.setItem(SESSION_KEY, pp);
     setPassphrase(pp);
+    // Request persistent storage so the browser won't evict IndexedDB
+    try {
+      await requestPersistentStorage();
+    } catch {
+      // Silently ignore — not all browsers support this
+    }
   };
 
   const handleLock = () => {

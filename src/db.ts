@@ -304,3 +304,98 @@ export async function reorderCategories(categories: Category[]): Promise<void> {
     tx.addEventListener("error", () => reject(tx.error));
   });
 }
+
+// ── Export / Import ──
+
+export interface VaultExport {
+  version: 1;
+  exportedAt: number;
+  notes: StoredNote[];
+  categories: Category[];
+}
+
+export async function exportVault(): Promise<VaultExport> {
+  const db = await openDB();
+
+  const notes: StoredNote[] = await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+
+  const categories: Category[] = await new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readonly");
+    const store = tx.objectStore(CATEGORY_STORE);
+    const request = store.getAll();
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+
+  return {
+    version: 1,
+    exportedAt: Date.now(),
+    notes,
+    categories,
+  };
+}
+
+export async function importVault(data: VaultExport): Promise<{ notes: number; categories: number }> {
+  if (data.version !== 1) {
+    throw new Error(`Unsupported vault export version: ${data.version}`);
+  }
+
+  const db = await openDB();
+
+  // Import notes
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    for (const note of data.notes) {
+      store.put(note);
+    }
+    tx.addEventListener("complete", () => resolve());
+    tx.addEventListener("error", () => reject(tx.error));
+  });
+
+  // Import categories
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readwrite");
+    const store = tx.objectStore(CATEGORY_STORE);
+    for (const cat of data.categories) {
+      store.put(cat);
+    }
+    tx.addEventListener("complete", () => resolve());
+    tx.addEventListener("error", () => reject(tx.error));
+  });
+
+  return { notes: data.notes.length, categories: data.categories.length };
+}
+
+// ── Storage persistence ──
+
+export async function requestPersistentStorage(): Promise<boolean> {
+  if (navigator.storage && navigator.storage.persist) {
+    return navigator.storage.persist();
+  }
+  return false;
+}
+
+export async function getStorageEstimate(): Promise<{ usage: number; quota: number } | null> {
+  if (navigator.storage && navigator.storage.estimate) {
+    const estimate = await navigator.storage.estimate();
+    return {
+      usage: estimate.usage ?? 0,
+      quota: estimate.quota ?? 0,
+    };
+  }
+  return null;
+}
+
+export async function isStoragePersisted(): Promise<boolean> {
+  if (navigator.storage && navigator.storage.persisted) {
+    return navigator.storage.persisted();
+  }
+  return false;
+}

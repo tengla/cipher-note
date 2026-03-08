@@ -69,4 +69,18 @@ mock.module("./db", () => ({
   reorderCategories: mock(async (cats: Category[]) => {
     store.categories = cats;
   }),
+  exportVault: mock(async () => ({
+    version: 1,
+    exportedAt: Date.now(),
+    notes: [...store.notes],
+    categories: [...store.categories],
+  })),
+  importVault: mock(async (data: { notes: Note[]; categories: Category[] }) => {
+    store.notes = [...data.notes];
+    store.categories = [...data.categories];
+    return { notes: data.notes.length, categories: data.categories.length };
+  }),
+  requestPersistentStorage: mock(async () => true),
+  isStoragePersisted: mock(async () => true),
+  getStorageEstimate: mock(async () => ({ usage: 1024, quota: 1024 * 1024 * 100 })),
 }));

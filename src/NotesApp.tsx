@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +30,9 @@ import {
   ChevronUp,
   ChevronDown,
   Check,
+  Download,
+  Upload,
+  HardDrive,
 } from "lucide-react";
 import {
   addNote,
@@ -45,8 +48,13 @@ import {
   updateCategory,
   deleteCategory,
   reorderCategories,
+  exportVault,
+  importVault,
+  isStoragePersisted,
+  getStorageEstimate,
   type Note,
   type Category,
+  type VaultExport,
 } from "./db";
 
 function getCategoryBadgeStyle(color: string) {
@@ -393,6 +401,15 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     loadCategories();
   }, [loadCategories]);
 
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [storageInfo, setStorageInfo] = useState<{ usage: number; quota: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    isStoragePersisted().then(setPersisted);
+    getStorageEstimate().then(setStorageInfo);
+  }, []);
+
   const categoryColorMap = Object.fromEntries(
     categories.map((c) => [c.name, c.color])
   );
@@ -545,6 +562,40 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     } catch (err) {
       log(`Error fetching raw note: ${err}`);
     }
+  };
+
+  const handleExport = async () => {
+    try {
+      const vault = await exportVault();
+      const json = JSON.stringify(vault, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ciphernotes-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      log(`exportVault() → ${vault.notes.length} notes, ${vault.categories.length} categories exported`);
+    } catch (err) {
+      log(`Error exporting vault: ${err}`);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data: VaultExport = JSON.parse(text);
+      const result = await importVault(data);
+      log(`importVault() → ${result.notes} notes, ${result.categories} categories imported`);
+      await loadNotes();
+      await loadCategories();
+    } catch (err) {
+      log(`Error importing vault: ${err}`);
+    }
+    // Reset file input so re-selecting the same file works
+    e.target.value = "";
   };
 
   // Detail view — shown when viewing a note
@@ -865,6 +916,50 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
               Clear All
             </Button>
           )}
+        </div>
+      </div>
+
+      {/* Vault Backup & Storage */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <HardDrive className="w-3.5 h-3.5 text-muted-foreground/40" />
+          {persisted !== null && (
+            <span className={`text-[10px] font-mono ${persisted ? "text-primary/60" : "text-yellow-500/70"}`}>
+              {persisted ? "persistent" : "evictable"}
+            </span>
+          )}
+          {storageInfo && (
+            <span className="text-[10px] text-muted-foreground/40 font-mono">
+              {(storageInfo.usage / 1024).toFixed(1)}KB used
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleExport}
+            className="h-7 text-[10px] text-muted-foreground/50 hover:text-foreground gap-1"
+          >
+            <Download className="w-3 h-3" />
+            Export
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-7 text-[10px] text-muted-foreground/50 hover:text-foreground gap-1"
+          >
+            <Upload className="w-3 h-3" />
+            Import
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+          />
         </div>
       </div>
 
