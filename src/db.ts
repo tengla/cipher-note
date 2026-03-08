@@ -19,9 +19,25 @@ interface StoredNote {
   updatedAt: number;
 }
 
+export interface Category {
+  id?: number;
+  name: string;
+  color: string; // oklch hue value (e.g. "260" for purple)
+  order: number;
+}
+
 const DB_NAME = "NotesDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "notes";
+const CATEGORY_STORE = "categories";
+
+const DEFAULT_CATEGORIES: Omit<Category, "id">[] = [
+  { name: "General", color: "260", order: 0 },
+  { name: "Work", color: "200", order: 1 },
+  { name: "Personal", color: "330", order: 2 },
+  { name: "Ideas", color: "80", order: 3 },
+  { name: "Todo", color: "160", order: 4 },
+];
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -35,6 +51,14 @@ function openDB(): Promise<IDBDatabase> {
         });
         store.createIndex("category", "category", { unique: false });
         store.createIndex("createdAt", "createdAt", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(CATEGORY_STORE)) {
+        const catStore = db.createObjectStore(CATEGORY_STORE, {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+        catStore.createIndex("name", "name", { unique: true });
+        catStore.createIndex("order", "order", { unique: false });
       }
     });
     request.addEventListener("success", () => resolve(request.result));
@@ -193,5 +217,90 @@ export async function countNotes(): Promise<number> {
     const request = store.count();
     request.addEventListener("success", () => resolve(request.result));
     request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+// ── Category operations ──
+
+export async function getAllCategories(): Promise<Category[]> {
+  const db = await openDB();
+  const categories: Category[] = await new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readonly");
+    const store = tx.objectStore(CATEGORY_STORE);
+    const request = store.getAll();
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+
+  // Seed defaults if store is empty
+  if (categories.length === 0) {
+    const seeded = await seedDefaultCategories();
+    return seeded;
+  }
+
+  categories.sort((a, b) => a.order - b.order);
+  return categories;
+}
+
+async function seedDefaultCategories(): Promise<Category[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readwrite");
+    const store = tx.objectStore(CATEGORY_STORE);
+    const results: Category[] = [];
+    for (const cat of DEFAULT_CATEGORIES) {
+      const req = store.add(cat);
+      req.addEventListener("success", () => {
+        results.push({ ...cat, id: req.result as number });
+      });
+    }
+    tx.addEventListener("complete", () => resolve(results));
+    tx.addEventListener("error", () => reject(tx.error));
+  });
+}
+
+export async function addCategory(category: Omit<Category, "id">): Promise<number> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readwrite");
+    const store = tx.objectStore(CATEGORY_STORE);
+    const request = store.add(category);
+    request.addEventListener("success", () => resolve(request.result as number));
+    request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+export async function updateCategory(category: Category): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readwrite");
+    const store = tx.objectStore(CATEGORY_STORE);
+    const request = store.put(category);
+    request.addEventListener("success", () => resolve());
+    request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+export async function deleteCategory(id: number): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readwrite");
+    const store = tx.objectStore(CATEGORY_STORE);
+    const request = store.delete(id);
+    request.addEventListener("success", () => resolve());
+    request.addEventListener("error", () => reject(request.error));
+  });
+}
+
+export async function reorderCategories(categories: Category[]): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(CATEGORY_STORE, "readwrite");
+    const store = tx.objectStore(CATEGORY_STORE);
+    for (const cat of categories) {
+      store.put(cat);
+    }
+    tx.addEventListener("complete", () => resolve());
+    tx.addEventListener("error", () => reject(tx.error));
   });
 }

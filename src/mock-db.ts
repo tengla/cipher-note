@@ -1,15 +1,27 @@
 import { mock } from "bun:test";
-import type { Note } from "./db";
+import type { Note, Category } from "./db";
+
+const DEFAULT_CATEGORIES: Category[] = [
+  { id: 1, name: "General", color: "260", order: 0 },
+  { id: 2, name: "Work", color: "200", order: 1 },
+  { id: 3, name: "Personal", color: "330", order: 2 },
+  { id: 4, name: "Ideas", color: "80", order: 3 },
+  { id: 5, name: "Todo", color: "160", order: 4 },
+];
 
 // Use an object so all references (mock closures + test files) share state
 export const store = {
   notes: [] as Note[],
   nextId: 1,
+  categories: [...DEFAULT_CATEGORIES] as Category[],
+  nextCatId: 6,
 };
 
 export function resetMockDb() {
   store.notes = [];
   store.nextId = 1;
+  store.categories = [...DEFAULT_CATEGORIES];
+  store.nextCatId = 6;
 }
 
 mock.module("./db", () => ({
@@ -40,5 +52,21 @@ mock.module("./db", () => ({
   }),
   rotatePassphrase: mock(async (_oldPassphrase: string, _newPassphrase: string) => {
     return store.notes.length;
+  }),
+  getAllCategories: mock(async () => [...store.categories]),
+  addCategory: mock(async (cat: Omit<Category, "id">) => {
+    const id = store.nextCatId++;
+    store.categories.push({ ...cat, id });
+    return id;
+  }),
+  updateCategory: mock(async (cat: Category) => {
+    const idx = store.categories.findIndex((c) => c.id === cat.id);
+    if (idx !== -1) store.categories[idx] = cat;
+  }),
+  deleteCategory: mock(async (id: number) => {
+    store.categories = store.categories.filter((c) => c.id !== id);
+  }),
+  reorderCategories: mock(async (cats: Category[]) => {
+    store.categories = cats;
   }),
 }));

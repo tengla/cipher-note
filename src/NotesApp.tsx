@@ -25,6 +25,11 @@ import {
   Filter,
   KeyRound,
   ArrowLeft,
+  Tags,
+  GripVertical,
+  ChevronUp,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import {
   addNote,
@@ -35,18 +40,35 @@ import {
   clearAllNotes,
   countNotes,
   getRawNote,
+  getAllCategories,
+  addCategory,
+  updateCategory,
+  deleteCategory,
+  reorderCategories,
   type Note,
+  type Category,
 } from "./db";
 
-const CATEGORIES = ["General", "Work", "Personal", "Ideas", "Todo"];
+function getCategoryBadgeStyle(color: string) {
+  return {
+    background: `oklch(0.5 0.15 ${color} / 0.25)`,
+    color: `oklch(0.78 0.14 ${color})`,
+    border: `1px solid oklch(0.5 0.15 ${color} / 0.3)`,
+  };
+}
 
-const CATEGORY_BADGE_CLASS: Record<string, string> = {
-  General: "badge-general",
-  Work: "badge-work",
-  Personal: "badge-personal",
-  Ideas: "badge-ideas",
-  Todo: "badge-todo",
-};
+const HUE_PRESETS = [
+  { label: "Purple", hue: "260" },
+  { label: "Blue", hue: "200" },
+  { label: "Pink", hue: "330" },
+  { label: "Yellow", hue: "80" },
+  { label: "Teal", hue: "160" },
+  { label: "Red", hue: "25" },
+  { label: "Orange", hue: "55" },
+  { label: "Green", hue: "140" },
+  { label: "Indigo", hue: "280" },
+  { label: "Coral", hue: "15" },
+];
 
 function LogPanel({ logs }: { logs: string[] }) {
   return (
@@ -102,7 +124,253 @@ function EmptyState({ filtered }: { filtered: boolean }) {
   );
 }
 
-type View = "list" | "detail" | "editor";
+function CategoryEditor({
+  categories,
+  onClose,
+  onChanged,
+}: {
+  categories: Category[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [cats, setCats] = useState<Category[]>(categories);
+  const [newName, setNewName] = useState("");
+  const [newColor, setNewColor] = useState("260");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editColor, setEditColor] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAdd = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    if (cats.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+      setError("Category already exists");
+      return;
+    }
+    setError(null);
+    const order = cats.length > 0 ? Math.max(...cats.map((c) => c.order)) + 1 : 0;
+    const id = await addCategory({ name, color: newColor, order });
+    setCats([...cats, { id, name, color: newColor, order }]);
+    setNewName("");
+    onChanged();
+  };
+
+  const handleStartEdit = (cat: Category) => {
+    setEditingId(cat.id!);
+    setEditName(cat.name);
+    setEditColor(cat.color);
+    setError(null);
+  };
+
+  const handleSaveEdit = async (cat: Category) => {
+    const name = editName.trim();
+    if (!name) return;
+    if (cats.some((c) => c.id !== cat.id && c.name.toLowerCase() === name.toLowerCase())) {
+      setError("Category name already taken");
+      return;
+    }
+    setError(null);
+    const updated = { ...cat, name, color: editColor };
+    await updateCategory(updated);
+    setCats(cats.map((c) => (c.id === cat.id ? updated : c)));
+    setEditingId(null);
+    onChanged();
+  };
+
+  const handleDelete = async (cat: Category) => {
+    await deleteCategory(cat.id!);
+    setCats(cats.filter((c) => c.id !== cat.id));
+    onChanged();
+  };
+
+  const handleMove = async (index: number, direction: -1 | 1) => {
+    const swapIndex = index + direction;
+    if (swapIndex < 0 || swapIndex >= cats.length) return;
+    const updated = [...cats];
+    const tempOrder = updated[index]!.order;
+    updated[index] = { ...updated[index]!, order: updated[swapIndex]!.order };
+    updated[swapIndex] = { ...updated[swapIndex]!, order: tempOrder };
+    updated.sort((a, b) => a.order - b.order);
+    setCats(updated);
+    await reorderCategories(updated);
+    onChanged();
+  };
+
+  return (
+    <div className="glass-card rounded-xl p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-7 w-7 p-0 text-muted-foreground/60 hover:text-foreground hover:bg-accent/50"
+          title="Back to notes"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+        <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
+          <Tags className="w-3 h-3 text-primary" />
+        </div>
+        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Manage Categories
+        </span>
+      </div>
+
+      {error && (
+        <p className="text-xs text-destructive mb-3">{error}</p>
+      )}
+
+      {/* Category list */}
+      <div className="flex flex-col gap-1.5 mb-4">
+        {cats.map((cat, index) => (
+          <div
+            key={cat.id}
+            className="flex items-center gap-2 rounded-lg bg-background/30 px-3 py-2 border border-border/30"
+          >
+            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0" />
+            <div className="flex flex-col gap-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleMove(index, -1)}
+                disabled={index === 0}
+                className="text-muted-foreground/40 hover:text-foreground disabled:opacity-20 disabled:cursor-default"
+              >
+                <ChevronUp className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleMove(index, 1)}
+                disabled={index === cats.length - 1}
+                className="text-muted-foreground/40 hover:text-foreground disabled:opacity-20 disabled:cursor-default"
+              >
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
+
+            {editingId === cat.id ? (
+              <>
+                <Input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="h-7 text-xs flex-1 bg-background/50"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveEdit(cat);
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                />
+                <div className="flex gap-1">
+                  {HUE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.hue}
+                      type="button"
+                      onClick={() => setEditColor(preset.hue)}
+                      className="w-4 h-4 rounded-full border border-white/20 shrink-0 transition-transform"
+                      style={{
+                        background: `oklch(0.6 0.18 ${preset.hue})`,
+                        transform: editColor === preset.hue ? "scale(1.3)" : "scale(1)",
+                        boxShadow: editColor === preset.hue ? `0 0 6px oklch(0.6 0.18 ${preset.hue})` : "none",
+                      }}
+                      title={preset.label}
+                    />
+                  ))}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleSaveEdit(cat)}
+                  className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingId(null)}
+                  className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <span
+                  className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
+                  style={getCategoryBadgeStyle(cat.color)}
+                >
+                  {cat.name}
+                </span>
+                <span className="flex-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleStartEdit(cat)}
+                  className="h-7 w-7 p-0 text-muted-foreground/40 hover:text-foreground hover:bg-accent/50"
+                  title="Edit"
+                >
+                  <Pencil className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDelete(cat)}
+                  className="h-7 w-7 p-0 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10"
+                  title="Delete"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Add new category */}
+      <div className="flex items-center gap-2 rounded-lg bg-background/20 px-3 py-2 border border-dashed border-border/40">
+        <Plus className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="New category..."
+          className="h-7 text-xs flex-1 bg-transparent border-0 shadow-none focus-visible:ring-0 px-0"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAdd();
+          }}
+        />
+        <div className="flex gap-1">
+          {HUE_PRESETS.map((preset) => (
+            <button
+              key={preset.hue}
+              type="button"
+              onClick={() => setNewColor(preset.hue)}
+              className="w-4 h-4 rounded-full border border-white/20 shrink-0 transition-transform"
+              style={{
+                background: `oklch(0.6 0.18 ${preset.hue})`,
+                transform: newColor === preset.hue ? "scale(1.3)" : "scale(1)",
+                boxShadow: newColor === preset.hue ? `0 0 6px oklch(0.6 0.18 ${preset.hue})` : "none",
+              }}
+              title={preset.label}
+            />
+          ))}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleAdd}
+          disabled={!newName.trim()}
+          className="h-7 text-xs text-primary hover:text-primary hover:bg-primary/10 gap-1"
+        >
+          <Plus className="w-3 h-3" />
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type View = "list" | "detail" | "editor" | "categories";
 
 export function NotesApp({ passphrase }: { passphrase: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -114,6 +382,21 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
   const [totalCount, setTotalCount] = useState(0);
   const [rawContents, setRawContents] = useState<Record<number, string>>({});
   const [formRevision, setFormRevision] = useState(0);
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  const loadCategories = useCallback(async () => {
+    const cats = await getAllCategories();
+    setCategories(cats);
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  const categoryColorMap = Object.fromEntries(
+    categories.map((c) => [c.name, c.color])
+  );
+  const categoryNames = categories.map((c) => c.name);
 
   const log = useCallback((message: string) => {
     setLogs((prev) => [
@@ -282,7 +565,8 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <span
-                className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 ${CATEGORY_BADGE_CLASS[viewingNote.category] ?? "badge-general"}`}
+                className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5"
+                style={getCategoryBadgeStyle(categoryColorMap[viewingNote.category] ?? "260")}
               >
                 {viewingNote.category}
               </span>
@@ -432,7 +716,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent align="start">
-                  {CATEGORIES.map((cat) => (
+                  {categoryNames.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
                     </SelectItem>
@@ -492,17 +776,61 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     );
   }
 
+  // Categories view
+  if (view === "categories") {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        <CategoryEditor
+          categories={categories}
+          onClose={() => setView("list")}
+          onChanged={() => loadCategories()}
+        />
+
+        {/* Operation Log */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-muted-foreground/40" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Operation Log
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLogs([])}
+              className="h-6 text-[10px] text-muted-foreground/40 hover:text-muted-foreground"
+            >
+              Clear
+            </Button>
+          </div>
+          <LogPanel logs={logs} />
+        </div>
+      </div>
+    );
+  }
+
   // List view — notes list with "New Note" button
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* New Note Button */}
-      <Button
-        onClick={handleNewNote}
-        className="gap-2 font-semibold"
-      >
-        <Plus className="w-4 h-4" />
-        New Note
-      </Button>
+      {/* Action buttons */}
+      <div className="flex gap-2">
+        <Button
+          onClick={handleNewNote}
+          className="gap-2 font-semibold flex-1"
+        >
+          <Plus className="w-4 h-4" />
+          New Note
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => setView("categories")}
+          className="gap-2 text-muted-foreground hover:text-foreground"
+        >
+          <Tags className="w-4 h-4" />
+          Categories
+        </Button>
+      </div>
 
       {/* Filter & Stats Bar */}
       <div className="flex items-center justify-between gap-3">
@@ -514,7 +842,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
             </SelectTrigger>
             <SelectContent align="start">
               <SelectItem value="all">All Notes</SelectItem>
-              {CATEGORIES.map((cat) => (
+              {categoryNames.map((cat) => (
                 <SelectItem key={cat} value={cat}>
                   {cat}
                 </SelectItem>
@@ -554,7 +882,8 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
               style={{ animationDelay: `${index * 60}ms` }}
             >
               <span
-                className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 shrink-0 ${CATEGORY_BADGE_CLASS[note.category] ?? "badge-general"}`}
+                className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 shrink-0"
+                style={getCategoryBadgeStyle(categoryColorMap[note.category] ?? "260")}
               >
                 {note.category}
               </span>

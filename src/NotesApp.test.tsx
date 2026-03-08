@@ -206,9 +206,9 @@ describe("NotesApp", () => {
     const { container } = await renderNotesApp();
     expect(screen.getByText("Work Task")).toBeInTheDocument();
 
-    const badge = container.querySelector(".badge-work");
-    expect(badge).not.toBeNull();
-    expect(badge!.textContent).toBe("Work");
+    const badge = screen.getByText("Work");
+    expect(badge).toBeInTheDocument();
+    expect(badge.tagName.toLowerCase()).toBe("span");
   });
 
   test("note content is displayed in detail view", async () => {
