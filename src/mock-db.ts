@@ -38,4 +38,7 @@ mock.module("./db", () => ({
     const note = store.notes.find((n) => n.id === id);
     return note ? { ...note, content: "encrypted:ciphertext" } : undefined;
   }),
+  rotatePassphrase: mock(async (_oldPassphrase: string, _newPassphrase: string) => {
+    return store.notes.length;
+  }),
 }));

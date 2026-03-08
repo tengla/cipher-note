@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
-import { Shield, Lock, LogOut, KeyRound } from "lucide-react";
+import { Shield, Lock, LogOut, KeyRound, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotesApp } from "./NotesApp";
+import { rotatePassphrase } from "./db";
 import "./index.css";
 
 const SESSION_KEY = "ciphernotes-passphrase";
@@ -103,6 +104,9 @@ export function App() {
   const [passphrase, setPassphrase] = useState<string | null>(() => {
     return sessionStorage.getItem(SESSION_KEY);
   });
+  const [showRotate, setShowRotate] = useState(false);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  const [rotating, setRotating] = useState(false);
 
   const handleUnlock = (pp: string) => {
     sessionStorage.setItem(SESSION_KEY, pp);
@@ -112,6 +116,37 @@ export function App() {
   const handleLock = () => {
     sessionStorage.removeItem(SESSION_KEY);
     setPassphrase(null);
+    setShowRotate(false);
+  };
+
+  const handleRotate = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setRotateError(null);
+    const formData = new FormData(e.currentTarget);
+    const newPassphrase = (formData.get("new-passphrase") as string).trim();
+    const confirmPassphrase = (formData.get("confirm-passphrase") as string).trim();
+
+    if (!newPassphrase) return;
+    if (newPassphrase !== confirmPassphrase) {
+      setRotateError("Passphrases do not match");
+      return;
+    }
+    if (newPassphrase === passphrase) {
+      setRotateError("New passphrase must be different");
+      return;
+    }
+
+    try {
+      setRotating(true);
+      await rotatePassphrase(passphrase!, newPassphrase);
+      sessionStorage.setItem(SESSION_KEY, newPassphrase);
+      setPassphrase(newPassphrase);
+      setShowRotate(false);
+    } catch {
+      setRotateError("Failed to rotate — is your current passphrase correct?");
+    } finally {
+      setRotating(false);
+    }
   };
 
   return (
@@ -138,7 +173,16 @@ export function App() {
           </p>
           <div className="glow-line mt-6 mx-auto max-w-xs" />
           {passphrase && (
-            <div className="mt-4">
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setShowRotate((v) => !v); setRotateError(null); }}
+                className="gap-1.5 text-xs text-muted-foreground/60 hover:text-primary hover:bg-primary/10"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Rotate Passphrase
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -148,6 +192,43 @@ export function App() {
                 <LogOut className="w-3.5 h-3.5" />
                 Lock
               </Button>
+            </div>
+          )}
+          {showRotate && (
+            <div className="glass-card rounded-xl p-5 max-w-sm mx-auto mt-4">
+              <h3 className="text-sm font-semibold mb-1">Rotate Passphrase</h3>
+              <p className="text-[11px] text-muted-foreground/60 mb-4">
+                All notes will be re-encrypted with the new passphrase.
+              </p>
+              <form onSubmit={handleRotate} className="flex flex-col gap-3">
+                <Input
+                  name="new-passphrase"
+                  type="password"
+                  placeholder="New passphrase..."
+                  autoFocus
+                  required
+                  className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+                />
+                <Input
+                  name="confirm-passphrase"
+                  type="password"
+                  placeholder="Confirm new passphrase..."
+                  required
+                  className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+                />
+                {rotateError && (
+                  <p className="text-xs text-destructive">{rotateError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={rotating} className="flex-1 gap-2 font-semibold">
+                    <RefreshCw className={`w-3.5 h-3.5 ${rotating ? "animate-spin" : ""}`} />
+                    {rotating ? "Rotating..." : "Rotate"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setShowRotate(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
             </div>
           )}
         </header>

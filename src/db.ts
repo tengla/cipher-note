@@ -152,6 +152,39 @@ export async function getRawNote(id: number): Promise<StoredNote | undefined> {
   });
 }
 
+export async function rotatePassphrase(oldPassphrase: string, newPassphrase: string): Promise<number> {
+  const db = await openDB();
+  const storedNotes: StoredNote[] = await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("error", () => reject(request.error));
+  });
+
+  // Decrypt all with old passphrase, re-encrypt with new
+  const reEncrypted: StoredNote[] = await Promise.all(
+    storedNotes.map(async (stored) => {
+      if (!stored.content) return stored;
+      const plaintext = await decrypt(stored.content, oldPassphrase);
+      return { ...stored, content: await encrypt(plaintext, newPassphrase) };
+    })
+  );
+
+  // Write all back in a single transaction
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    for (const note of reEncrypted) {
+      store.put(note);
+    }
+    tx.addEventListener("complete", () => resolve());
+    tx.addEventListener("error", () => reject(tx.error));
+  });
+
+  return reEncrypted.length;
+}
+
 export async function countNotes(): Promise<number> {
   const db = await openDB();
   return new Promise((resolve, reject) => {

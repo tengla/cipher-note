@@ -64,6 +64,9 @@ describe("NotesApp", () => {
     await renderNotesApp();
     expect(screen.getByText("To Delete")).toBeInTheDocument();
 
+    // Click note to open detail view, then delete
+    await user.click(screen.getByText("To Delete"));
+    await waitFor(() => screen.getByTitle("Delete"));
     await user.click(screen.getByTitle("Delete"));
 
     await waitFor(() => {
@@ -80,6 +83,9 @@ describe("NotesApp", () => {
     await renderNotesApp();
     expect(screen.getByText("Editable Note")).toBeInTheDocument();
 
+    // Click note to open detail view, then click edit
+    await user.click(screen.getByText("Editable Note"));
+    await waitFor(() => screen.getByTitle("Edit"));
     await user.click(screen.getByTitle("Edit"));
 
     await waitFor(() => {
@@ -105,6 +111,9 @@ describe("NotesApp", () => {
     await renderNotesApp();
     expect(screen.getByText("Note")).toBeInTheDocument();
 
+    // Click note to open detail view, then click edit
+    await user.click(screen.getByText("Note"));
+    await waitFor(() => screen.getByTitle("Edit"));
     await user.click(screen.getByTitle("Edit"));
 
     await waitFor(() => {
@@ -129,6 +138,9 @@ describe("NotesApp", () => {
     await renderNotesApp();
     expect(screen.getByText("Secret")).toBeInTheDocument();
 
+    // Click note to open detail view, then show raw
+    await user.click(screen.getByText("Secret"));
+    await waitFor(() => screen.getByTitle("Show encrypted"));
     await user.click(screen.getByTitle("Show encrypted"));
 
     await waitFor(() => {
@@ -146,6 +158,9 @@ describe("NotesApp", () => {
     await renderNotesApp();
     expect(screen.getByText("Secret")).toBeInTheDocument();
 
+    // Click note to open detail view, then toggle raw
+    await user.click(screen.getByText("Secret"));
+    await waitFor(() => screen.getByTitle("Show encrypted"));
     await user.click(screen.getByTitle("Show encrypted"));
     await waitFor(() => screen.getByText("encrypted:ciphertext"));
 
@@ -196,12 +211,20 @@ describe("NotesApp", () => {
     expect(badge!.textContent).toBe("Work");
   });
 
-  test("note content is displayed", async () => {
+  test("note content is displayed in detail view", async () => {
+    const user = userEvent.setup();
     store.notes = [
       { id: 1, title: "Title", content: "My visible content here", category: "General", createdAt: Date.now(), updatedAt: Date.now() },
     ];
 
     await renderNotesApp();
-    expect(screen.getByText("My visible content here")).toBeInTheDocument();
+    // Content should not be visible in list view
+    expect(screen.queryByText("My visible content here")).not.toBeInTheDocument();
+
+    // Click note to open detail view
+    await user.click(screen.getByText("Title"));
+    await waitFor(() => {
+      expect(screen.getByText("My visible content here")).toBeInTheDocument();
+    });
   });
 });

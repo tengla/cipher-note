@@ -102,10 +102,13 @@ function EmptyState({ filtered }: { filtered: boolean }) {
   );
 }
 
+type View = "list" | "detail" | "editor";
+
 export function NotesApp({ passphrase }: { passphrase: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
-  const [showEditor, setShowEditor] = useState(false);
+  const [viewingNote, setViewingNote] = useState<Note | null>(null);
+  const [view, setView] = useState<View>("list");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [logs, setLogs] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -191,6 +194,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
       await deleteNote(note.id!);
       log(`deleteNote(${note.id}) → Deleted "${note.title}"`);
       if (editingNote?.id === note.id) closeEditor();
+      if (viewingNote?.id === note.id) closeDetail();
       await loadNotes();
     } catch (err) {
       log(`Error deleting note: ${err}`);
@@ -210,21 +214,32 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
 
   const handleEdit = (note: Note) => {
     setEditingNote(note);
-    setShowEditor(true);
+    setView("editor");
     setFormRevision((r) => r + 1);
     log(`Editing note id=${note.id}: "${note.title}"`);
   };
 
   const handleNewNote = () => {
     setEditingNote(null);
-    setShowEditor(true);
+    setView("editor");
     setFormRevision((r) => r + 1);
+  };
+
+  const handleViewNote = (note: Note) => {
+    setViewingNote(note);
+    setView("detail");
+    log(`Viewing note id=${note.id}: "${note.title}"`);
   };
 
   const closeEditor = () => {
     setEditingNote(null);
-    setShowEditor(false);
+    setView("list");
     setFormRevision((r) => r + 1);
+  };
+
+  const closeDetail = () => {
+    setViewingNote(null);
+    setView("list");
   };
 
   const handleShowRaw = async (note: Note) => {
@@ -249,8 +264,119 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     }
   };
 
+  // Detail view — shown when viewing a note
+  if (view === "detail" && viewingNote) {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={closeDetail}
+                className="h-7 w-7 p-0 text-muted-foreground/60 hover:text-foreground hover:bg-accent/50"
+                title="Back to notes"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <span
+                className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 ${CATEGORY_BADGE_CLASS[viewingNote.category] ?? "badge-general"}`}
+              >
+                {viewingNote.category}
+              </span>
+            </div>
+            <div className="flex gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleShowRaw(viewingNote)}
+                className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-primary hover:bg-primary/10"
+                title={rawContents[viewingNote.id!] ? "Hide encrypted" : "Show encrypted"}
+              >
+                {rawContents[viewingNote.id!] ? (
+                  <EyeOff className="w-3.5 h-3.5" />
+                ) : (
+                  <Eye className="w-3.5 h-3.5" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEdit(viewingNote)}
+                className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground hover:bg-accent"
+                title="Edit"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
+                onClick={() => handleDelete(viewingNote)}
+                title="Delete"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          <h2 className="text-lg font-semibold text-foreground mb-1">
+            {viewingNote.title}
+          </h2>
+          <p className="text-[11px] text-muted-foreground/50 font-mono mb-4">
+            {new Date(viewingNote.updatedAt).toLocaleString()}
+          </p>
+
+          {viewingNote.content && (
+            <MarkdownRenderer
+              content={viewingNote.content}
+              className="text-muted-foreground/80"
+            />
+          )}
+
+          {rawContents[viewingNote.id!] && (
+            <div className="rounded-lg bg-background/60 border border-primary/10 p-3 mt-4">
+              <div className="flex items-center gap-1.5 mb-2">
+                <ShieldCheck className="w-3 h-3 text-primary/60" />
+                <span className="text-[10px] font-semibold text-primary/60 uppercase tracking-widest">
+                  AES-256-GCM Ciphertext
+                </span>
+              </div>
+              <p className="text-[11px] font-mono text-primary/40 break-all leading-relaxed select-all">
+                {rawContents[viewingNote.id!]}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Operation Log */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-muted-foreground/40" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Operation Log
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLogs([])}
+              className="h-6 text-[10px] text-muted-foreground/40 hover:text-muted-foreground"
+            >
+              Clear
+            </Button>
+          </div>
+          <LogPanel logs={logs} />
+        </div>
+      </div>
+    );
+  }
+
   // Editor view — shown exclusively when composing or editing
-  if (showEditor) {
+  if (view === "editor") {
     return (
       <div className="flex flex-col gap-6 w-full">
         <div className="glass-card rounded-xl p-5">
@@ -418,90 +544,27 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
       {notes.length === 0 ? (
         <EmptyState filtered={filterCategory !== "all"} />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
           {notes.map((note, index) => (
-            <div
+            <button
               key={note.id}
-              className="note-card-enter glass-card rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
+              type="button"
+              onClick={() => handleViewNote(note)}
+              className="note-card-enter glass-card rounded-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:border-primary/20 text-left w-full cursor-pointer"
               style={{ animationDelay: `${index * 60}ms` }}
             >
-              {/* Card Header */}
-              <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 ${CATEGORY_BADGE_CLASS[note.category] ?? "badge-general"}`}
-                    >
-                      {note.category}
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-foreground truncate">
-                    {note.title}
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground/50 font-mono mt-0.5">
-                    {new Date(note.updatedAt).toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex gap-0.5 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleShowRaw(note)}
-                    className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-primary hover:bg-primary/10"
-                    title={rawContents[note.id!] ? "Hide encrypted" : "Show encrypted"}
-                  >
-                    {rawContents[note.id!] ? (
-                      <EyeOff className="w-3.5 h-3.5" />
-                    ) : (
-                      <Eye className="w-3.5 h-3.5" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(note)}
-                    className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground hover:bg-accent"
-                    title="Edit"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => handleDelete(note)}
-                    title="Delete"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Card Body */}
-              {(note.content || rawContents[note.id!]) && (
-                <div className="px-4 pb-4 flex flex-col gap-2.5">
-                  {note.content && (
-                    <MarkdownRenderer
-                      content={note.content}
-                      className="text-muted-foreground/80"
-                    />
-                  )}
-                  {rawContents[note.id!] && (
-                    <div className="rounded-lg bg-background/60 border border-primary/10 p-3 mt-1">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <ShieldCheck className="w-3 h-3 text-primary/60" />
-                        <span className="text-[10px] font-semibold text-primary/60 uppercase tracking-widest">
-                          AES-256-GCM Ciphertext
-                        </span>
-                      </div>
-                      <p className="text-[11px] font-mono text-primary/40 break-all leading-relaxed select-all">
-                        {rawContents[note.id!]}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+              <span
+                className={`inline-flex items-center text-[10px] font-semibold uppercase tracking-wider rounded-full px-2 py-0.5 shrink-0 ${CATEGORY_BADGE_CLASS[note.category] ?? "badge-general"}`}
+              >
+                {note.category}
+              </span>
+              <h3 className="text-sm font-semibold text-foreground truncate flex-1">
+                {note.title}
+              </h3>
+              <span className="text-[11px] text-muted-foreground/40 font-mono shrink-0">
+                {new Date(note.updatedAt).toLocaleDateString()}
+              </span>
+            </button>
           ))}
         </div>
       )}

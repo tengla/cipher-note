@@ -10,6 +10,7 @@ import {
   clearAllNotes,
   getRawNote,
   countNotes,
+  rotatePassphrase,
 } from "./db";
 
 const passphrase = "test-pass";
@@ -139,5 +140,24 @@ describe("db", () => {
     const id = await addNote(makeNote({ content: "" }), passphrase);
     const note = await getNote(id, passphrase);
     expect(note!.content).toBe("");
+  });
+
+  test("rotatePassphrase re-encrypts all notes with new passphrase", async () => {
+    const newPassphrase = "new-pass";
+    await addNote(makeNote({ title: "Note A", content: "secret A" }), passphrase);
+    await addNote(makeNote({ title: "Note B", content: "secret B" }), passphrase);
+    await addNote(makeNote({ title: "Empty", content: "" }), passphrase);
+
+    const count = await rotatePassphrase(passphrase, newPassphrase);
+    expect(count).toBe(3);
+
+    // New passphrase should decrypt successfully
+    const withNew = await getAllNotes(newPassphrase);
+    expect(withNew).toHaveLength(3);
+    const titles = withNew.map((n) => n.title).sort();
+    expect(titles).toEqual(["Empty", "Note A", "Note B"]);
+    expect(withNew.find((n) => n.title === "Note A")!.content).toBe("secret A");
+    expect(withNew.find((n) => n.title === "Note B")!.content).toBe("secret B");
+    expect(withNew.find((n) => n.title === "Empty")!.content).toBe("");
   });
 });
