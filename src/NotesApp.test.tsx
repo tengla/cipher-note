@@ -24,10 +24,17 @@ describe("NotesApp", () => {
     expect(screen.getByText("Your vault is empty")).toBeInTheDocument();
   });
 
-  test("renders the new note form", async () => {
+  test("editor is hidden by default, shown after clicking New Note", async () => {
+    const user = userEvent.setup();
     await renderNotesApp();
+
+    // Editor should not be visible initially
+    expect(screen.queryByPlaceholderText("Note title...")).not.toBeInTheDocument();
+
+    // Click "New Note" to open the editor
+    await user.click(screen.getByRole("button", { name: /new note/i }));
+
     expect(screen.getByPlaceholderText("Note title...")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Note content...")).toBeInTheDocument();
   });
 
   test("shows operation log panel", async () => {
@@ -39,8 +46,8 @@ describe("NotesApp", () => {
     const user = userEvent.setup();
     await renderNotesApp();
 
+    await user.click(screen.getByRole("button", { name: /new note/i }));
     await user.type(screen.getByPlaceholderText("Note title..."), "My First Note");
-    await user.type(screen.getByPlaceholderText("Note content..."), "Secret content");
     await user.click(screen.getByRole("button", { name: /encrypt & store/i }));
 
     await waitFor(() => {
@@ -64,7 +71,7 @@ describe("NotesApp", () => {
     });
   });
 
-  test("clicking edit populates the form", async () => {
+  test("clicking edit opens editor with note data", async () => {
     const user = userEvent.setup();
     store.notes = [
       { id: 1, title: "Editable Note", content: "edit me", category: "Work", createdAt: Date.now(), updatedAt: Date.now() },
@@ -84,9 +91,12 @@ describe("NotesApp", () => {
 
     expect(screen.getByRole("button", { name: /update note/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+
+    // The note list should not be visible while editing
+    expect(screen.queryByText("Editable Note")).not.toBeInTheDocument();
   });
 
-  test("cancel edit returns to new note form", async () => {
+  test("cancel edit returns to list view", async () => {
     const user = userEvent.setup();
     store.notes = [
       { id: 1, title: "Note", content: "x", category: "General", createdAt: Date.now(), updatedAt: Date.now() },
@@ -104,7 +114,9 @@ describe("NotesApp", () => {
     await user.click(screen.getByRole("button", { name: /cancel/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("New Note")).toBeInTheDocument();
+      // Should be back to the list view with the note visible
+      expect(screen.getByText("Note")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new note/i })).toBeInTheDocument();
     });
   });
 

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -10,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MarkdownEditor } from "@/components/markdown/MarkdownEditor";
+import { MarkdownRenderer } from "@/components/markdown/MarkdownRenderer";
 import {
   Plus,
   Save,
@@ -20,10 +21,10 @@ import {
   EyeOff,
   ShieldCheck,
   Terminal,
-  FileText,
   Eraser,
   Filter,
   KeyRound,
+  ArrowLeft,
 } from "lucide-react";
 import {
   addNote,
@@ -94,7 +95,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
         <p className="text-xs text-muted-foreground/40 mt-1">
           {filtered
             ? "Try a different category filter"
-            : "Create your first encrypted note above"}
+            : "Create your first encrypted note"}
         </p>
       </div>
     </div>
@@ -104,10 +105,12 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 export function NotesApp({ passphrase }: { passphrase: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const [showEditor, setShowEditor] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [logs, setLogs] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [rawContents, setRawContents] = useState<Record<number, string>>({});
+  const [formRevision, setFormRevision] = useState(0);
 
   const log = useCallback((message: string) => {
     setLogs((prev) => [
@@ -165,7 +168,6 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
         log(
           `updateNote(${updated.id}) → Encrypted & updated "${title}" [${category}]`
         );
-        setEditingNote(null);
       } else {
         const now = Date.now();
         const id = await addNote({
@@ -177,7 +179,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
         }, passphrase);
         log(`addNote() → Encrypted & stored "${title}" with id=${id} [${category}]`);
       }
-      form.reset();
+      closeEditor();
       await loadNotes();
     } catch (err) {
       log(`Error saving note: ${err}`);
@@ -188,7 +190,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     try {
       await deleteNote(note.id!);
       log(`deleteNote(${note.id}) → Deleted "${note.title}"`);
-      if (editingNote?.id === note.id) setEditingNote(null);
+      if (editingNote?.id === note.id) closeEditor();
       await loadNotes();
     } catch (err) {
       log(`Error deleting note: ${err}`);
@@ -199,7 +201,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     try {
       await clearAllNotes();
       log(`clearAllNotes() → All notes deleted`);
-      setEditingNote(null);
+      closeEditor();
       await loadNotes();
     } catch (err) {
       log(`Error clearing notes: ${err}`);
@@ -208,7 +210,21 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
 
   const handleEdit = (note: Note) => {
     setEditingNote(note);
+    setShowEditor(true);
+    setFormRevision((r) => r + 1);
     log(`Editing note id=${note.id}: "${note.title}"`);
+  };
+
+  const handleNewNote = () => {
+    setEditingNote(null);
+    setShowEditor(true);
+    setFormRevision((r) => r + 1);
+  };
+
+  const closeEditor = () => {
+    setEditingNote(null);
+    setShowEditor(false);
+    setFormRevision((r) => r + 1);
   };
 
   const handleShowRaw = async (note: Note) => {
@@ -233,98 +249,134 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
     }
   };
 
-  const cancelEdit = () => {
-    setEditingNote(null);
-    log("Edit cancelled");
-  };
-
-  return (
-    <div className="flex flex-col gap-6 w-full">
-      {/* Compose Form */}
-      <div className="glass-card rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
-            {editingNote ? (
-              <Pencil className="w-3 h-3 text-primary" />
-            ) : (
-              <Plus className="w-3 h-3 text-primary" />
-            )}
-          </div>
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            {editingNote ? "Edit Note" : "New Note"}
-          </span>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <Label htmlFor="title" className="sr-only">
-                Title
-              </Label>
-              <Input
-                id="title"
-                name="title"
-                placeholder="Note title..."
-                defaultValue={editingNote?.title ?? ""}
-                key={editingNote?.id ?? "new"}
-                required
-                className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
-              />
-            </div>
-            <Label htmlFor="category" className="sr-only">
-              Category
-            </Label>
-            <Select
-              name="category"
-              defaultValue={editingNote?.category ?? "General"}
-              key={`cat-${editingNote?.id ?? "new"}`}
+  // Editor view — shown exclusively when composing or editing
+  if (showEditor) {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={closeEditor}
+              className="h-7 w-7 p-0 text-muted-foreground/60 hover:text-foreground hover:bg-accent/50"
+              title="Back to notes"
             >
-              <SelectTrigger className="w-[130px] bg-background/50 border-border/50" id="category">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent align="start">
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Label htmlFor="content" className="sr-only">
-            Content
-          </Label>
-          <Textarea
-            id="content"
-            name="content"
-            placeholder="Note content..."
-            className="min-h-20 resize-y bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
-            defaultValue={editingNote?.content ?? ""}
-            key={`content-${editingNote?.id ?? "new"}`}
-          />
-          <div className="flex gap-2">
-            <Button type="submit" className="flex-1 gap-2 font-semibold">
-              {editingNote ? (
-                <>
-                  <Save className="w-3.5 h-3.5" />
-                  Update Note
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  Encrypt & Store
-                </>
-              )}
+              <ArrowLeft className="w-4 h-4" />
             </Button>
-            {editingNote && (
-              <Button type="button" variant="outline" onClick={cancelEdit} className="gap-1.5">
+            <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
+              {editingNote ? (
+                <Pencil className="w-3 h-3 text-primary" />
+              ) : (
+                <Plus className="w-3 h-3 text-primary" />
+              )}
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              {editingNote ? "Edit Note" : "New Note"}
+            </span>
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Label htmlFor="title" className="sr-only">
+                  Title
+                </Label>
+                <Input
+                  id="title"
+                  name="title"
+                  placeholder="Note title..."
+                  defaultValue={editingNote?.title ?? ""}
+                  key={`title-${editingNote?.id ?? "new"}-${formRevision}`}
+                  required
+                  autoFocus
+                  className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+                />
+              </div>
+              <Label htmlFor="category" className="sr-only">
+                Category
+              </Label>
+              <Select
+                name="category"
+                defaultValue={editingNote?.category ?? "General"}
+                key={`cat-${editingNote?.id ?? "new"}-${formRevision}`}
+              >
+                <SelectTrigger className="w-[130px] bg-background/50 border-border/50" id="category">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <MarkdownEditor
+              name="content"
+              placeholder="Write your note in markdown..."
+              defaultValue={editingNote?.content ?? ""}
+              key={`content-${editingNote?.id ?? "new"}-${formRevision}`}
+            />
+            <div className="flex gap-2">
+              <Button type="submit" className="flex-1 gap-2 font-semibold">
+                {editingNote ? (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    Update Note
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    Encrypt & Store
+                  </>
+                )}
+              </Button>
+              <Button type="button" variant="outline" onClick={closeEditor} className="gap-1.5">
                 <X className="w-3.5 h-3.5" />
                 Cancel
               </Button>
-            )}
+            </div>
+          </form>
+        </div>
+
+        {/* Operation Log */}
+        <div>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-3.5 h-3.5 text-muted-foreground/40" />
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/50">
+                Operation Log
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLogs([])}
+              className="h-6 text-[10px] text-muted-foreground/40 hover:text-muted-foreground"
+            >
+              Clear
+            </Button>
           </div>
-        </form>
+          <LogPanel logs={logs} />
+        </div>
       </div>
+    );
+  }
+
+  // List view — notes list with "New Note" button
+  return (
+    <div className="flex flex-col gap-6 w-full">
+      {/* New Note Button */}
+      <Button
+        onClick={handleNewNote}
+        className="gap-2 font-semibold"
+      >
+        <Plus className="w-4 h-4" />
+        New Note
+      </Button>
 
       {/* Filter & Stats Bar */}
       <div className="flex items-center justify-between gap-3">
@@ -370,11 +422,7 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
           {notes.map((note, index) => (
             <div
               key={note.id}
-              className={`note-card-enter glass-card rounded-xl overflow-hidden transition-all duration-300 ${
-                editingNote?.id === note.id
-                  ? "editing-pulse ring-1 ring-primary/40"
-                  : "hover:border-primary/20"
-              }`}
+              className="note-card-enter glass-card rounded-xl overflow-hidden transition-all duration-300 hover:border-primary/20"
               style={{ animationDelay: `${index * 60}ms` }}
             >
               {/* Card Header */}
@@ -433,9 +481,10 @@ export function NotesApp({ passphrase }: { passphrase: string }) {
               {(note.content || rawContents[note.id!]) && (
                 <div className="px-4 pb-4 flex flex-col gap-2.5">
                   {note.content && (
-                    <p className="text-sm text-muted-foreground/80 whitespace-pre-wrap leading-relaxed">
-                      {note.content}
-                    </p>
+                    <MarkdownRenderer
+                      content={note.content}
+                      className="text-muted-foreground/80"
+                    />
                   )}
                   {rawContents[note.id!] && (
                     <div className="rounded-lg bg-background/60 border border-primary/10 p-3 mt-1">
