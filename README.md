@@ -2,6 +2,8 @@
 
 A fully encrypted notes application that stores everything locally in the browser using IndexedDB and AES-256-GCM encryption via the Web Crypto API. No data ever leaves your browser.
 
+**Live demo:** https://tengla.github.io/cipher-note/
+
 ## Features
 
 - **Client-side encryption** — AES-256-GCM with PBKDF2 key derivation (100k iterations)
