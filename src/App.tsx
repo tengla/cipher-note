@@ -223,7 +223,7 @@ export function App() {
     <div className="bg-mesh noise-overlay min-h-screen w-full">
       <MatrixRain />
 
-      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 py-10 sm:px-6">
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-3 py-6 sm:px-6 sm:py-10">
         {/* Header */}
         <header className="mb-8 text-center">
           <div className="inline-flex items-center gap-2.5 mb-4">
@@ -243,7 +243,7 @@ export function App() {
           </p>
           <div className="glow-line mt-6 mx-auto max-w-xs" />
           {passphrase && (
-            <div className="mt-4 flex items-center justify-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"

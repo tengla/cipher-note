@@ -153,7 +153,7 @@ export function MarkdownEditor({
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {/* Toolbar + Mode Toggle */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-0.5 flex-wrap">
           {toolbarButtons.map((item, i) =>
             item === "separator" ? (
@@ -197,7 +197,7 @@ export function MarkdownEditor({
       </div>
 
       {/* Editor / Preview */}
-      <div className={cn(viewMode === "split" && "grid grid-cols-2 gap-3")}>
+      <div className={cn(viewMode === "split" && "grid grid-cols-1 sm:grid-cols-2 gap-3")}>
         {(viewMode === "write" || viewMode === "split") && (
           <textarea
             ref={textareaRef}

@@ -267,18 +267,18 @@ function CategoryEditor({
             </div>
 
             {editingId === cat.id ? (
-              <>
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                 <Input
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="h-7 text-xs flex-1 bg-background/50"
+                  className="h-7 text-xs flex-1 min-w-[100px] bg-background/50"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSaveEdit(cat);
                     if (e.key === "Escape") setEditingId(null);
                   }}
                 />
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
                   {HUE_PRESETS.map((preset) => (
                     <button
                       key={preset.hue}
@@ -294,23 +294,25 @@ function CategoryEditor({
                     />
                   ))}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSaveEdit(cat)}
-                  className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setEditingId(null)}
-                  className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </>
+                <div className="flex gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSaveEdit(cat)}
+                    className="h-7 w-7 p-0 text-primary hover:text-primary hover:bg-primary/10"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditingId(null)}
+                    className="h-7 w-7 p-0 text-muted-foreground/50 hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
             ) : (
               <>
                 <span
@@ -345,18 +347,18 @@ function CategoryEditor({
       </div>
 
       {/* Add new category */}
-      <div className="flex items-center gap-2 rounded-lg bg-background/20 px-3 py-2 border border-dashed border-border/40">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-background/20 px-3 py-2 border border-dashed border-border/40">
         <Plus className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
         <Input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="New category..."
-          className="h-7 text-xs flex-1 bg-transparent border-0 shadow-none focus-visible:ring-0 px-0"
+          className="h-7 text-xs flex-1 min-w-[100px] bg-transparent border-0 shadow-none focus-visible:ring-0 px-0"
           onKeyDown={(e) => {
             if (e.key === "Enter") handleAdd();
           }}
         />
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {HUE_PRESETS.map((preset) => (
             <button
               key={preset.hue}
@@ -840,7 +842,7 @@ export function NotesApp({ passphrase, hasKeyPair }: { passphrase: string; hasKe
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1">
                 <Label htmlFor="title" className="sr-only">
                   Title
@@ -864,7 +866,7 @@ export function NotesApp({ passphrase, hasKeyPair }: { passphrase: string; hasKe
                 defaultValue={editingNote?.category ?? "General"}
                 key={`cat-${editingNote?.id ?? "new"}-${formRevision}`}
               >
-                <SelectTrigger className="w-[130px] bg-background/50 border-border/50" id="category">
+                <SelectTrigger className="w-full sm:w-[130px] bg-background/50 border-border/50" id="category">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent align="start">
@@ -1162,7 +1164,7 @@ export function NotesApp({ passphrase, hasKeyPair }: { passphrase: string; hasKe
       </div>
 
       {/* Filter & Stats Bar */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Filter className="w-3.5 h-3.5 text-muted-foreground/50" />
           <Select value={filterCategory} onValueChange={setFilterCategory}>
@@ -1198,7 +1200,7 @@ export function NotesApp({ passphrase, hasKeyPair }: { passphrase: string; hasKe
       </div>
 
       {/* Vault Backup & Storage */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <HardDrive className="w-3.5 h-3.5 text-muted-foreground/40" />
           {persisted !== null && (
@@ -1212,7 +1214,7 @@ export function NotesApp({ passphrase, hasKeyPair }: { passphrase: string; hasKe
             </span>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           <Button
             variant="ghost"
             size="sm"
